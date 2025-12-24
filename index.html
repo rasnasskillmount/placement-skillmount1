@@ -23,7 +23,7 @@ button:disabled { background:#ccc; cursor:not-allowed; }
 .green { background:#d4edda; color:#155724; }
 .yellow { background:#fff3cd; color:#856404; }
 .blue { background:#d1ecf1; color:#0c5460; }
-table { width:100%; border-collapse:collapse; margin-top:20px; font-size:14px; }
+table { width:100%; border-collapse:collapse; margin-top:20px; font-size:14px; overflow-x:auto; display:block; }
 th, td { border:1px solid #ddd; padding:10px; text-align:center; }
 th { background:#667eea; color:white; }
 .admin-link { position:fixed; top:20px; right:20px; background:#2c3e50; color:white; padding:10px 15px; border-radius:8px; text-decoration:none; }
@@ -50,7 +50,7 @@ th { background:#667eea; color:white; }
 <div class="box" id="testBox" style="display:none">
   <h2><i class="fas fa-clipboard-list"></i> Take Test</h2>
   <p id="welcome" style="text-align:center; font-weight:bold;"></p>
-  <button id="studentLogoutBtn" class="logoutBtn" onclick="studentLogout()" style="display:none;">Logout</button>
+  <button id="studentLogoutBtn" class="logoutBtn" onclick="studentLogout()">Logout</button>
   <label>Select your course:</label>
   <select id="course" onchange="loadQuestions()">
     <option value="">-- Select --</option>
@@ -63,13 +63,14 @@ th { background:#667eea; color:white; }
   <div id="questions"></div>
   <button id="submitBtn" onclick="checkResult()"><i class="fas fa-check"></i> Submit Test</button>
   <button id="pdfBtn" onclick="downloadPDF()" disabled><i class="fas fa-download"></i> Download Result PDF</button>
+  <div id="resultDiv" class="result"></div>
 </div>
 
 <!-- Admin Box -->
 <div class="box" id="adminBox" style="display:none">
   <h2><i class="fas fa-chart-line"></i> Admin Dashboard</h2>
-  <input type="email" id="adminEmail" placeholder="Enter admin email">
-  <input type="password" id="adminPass" placeholder="Enter admin password">
+  <input type="email" id="adminEmail" placeholder="Admin email">
+  <input type="password" id="adminPass" placeholder="Admin password">
   <button onclick="adminLogin()"><i class="fas fa-sign-in-alt"></i> Login</button>
   <div id="adminActions" style="display:none; margin-top:20px;">
     <button onclick="exportCSV()"><i class="fas fa-file-csv"></i> Export All Data as CSV</button>
@@ -80,12 +81,10 @@ th { background:#667eea; color:white; }
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-app.js";
-import { getAnalytics } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-analytics.js";
-import { getFirestore, collection, addDoc, getDocs } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-firestore.js";
+import { getFirestore, collection, addDoc, getDocs, doc, setDoc } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-firestore.js";
 import { getAuth, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-auth.js";
-import { jsPDF } from "https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js";
 
-// Firebase Config
+// Firebase config
 const firebaseConfig = {
   apiKey: "AIzaSyAWS62gFaVKSUadKwcmVPFpEwKei5g8qGY",
   authDomain: "placement-predictor-skillmount.firebaseapp.com",
@@ -97,7 +96,6 @@ const firebaseConfig = {
 };
 
 const app = initializeApp(firebaseConfig);
-const analytics = getAnalytics(app);
 const db = getFirestore(app);
 const auth = getAuth(app);
 
@@ -125,7 +123,7 @@ const questionBank = {
   ]
 };
 
-// Student Login
+// Student login/logout
 window.studentLogin = function(){
   const name = document.getElementById("studentName").value.trim();
   const phone = document.getElementById("studentPhone").value.trim();
@@ -136,10 +134,8 @@ window.studentLogin = function(){
   document.getElementById("testBox").style.display = "block";
   document.getElementById("welcome").innerText = `Welcome, ${name} 👋`;
   document.getElementById("pdfBtn").disabled = true;
-  document.getElementById("studentLogoutBtn").style.display = "block";
 }
 
-// Student Logout
 window.studentLogout = function(){
   localStorage.removeItem("studentName");
   localStorage.removeItem("studentPhone");
@@ -147,29 +143,30 @@ window.studentLogout = function(){
   document.getElementById("studentBox").style.display = "block";
   document.getElementById("testBox").style.display = "none";
   document.getElementById("welcome").innerText = "";
-  document.getElementById("studentLogoutBtn").style.display = "none";
+  document.getElementById("course").value = "";
 }
 
-// Load Questions
+// Load questions
 window.loadQuestions = function(){
   const c = document.getElementById("course").value;
   const qDiv = document.getElementById("questions");
   qDiv.innerHTML = "";
-  document.getElementById("resultDiv")?.remove();
+  document.getElementById("resultDiv").innerHTML = "";
   document.getElementById("submitBtn").disabled = false;
   document.getElementById("pdfBtn").disabled = true;
   if(!c) return;
+  let html = '';
   questionBank[c].forEach((item,index)=>{
-    let html=`<div class="question"><p>${index+1}. ${item.q}</p>`;
+    html += `<div class="question"><p>${index+1}. ${item.q}</p>`;
     item.options.forEach(opt=>{
-      html+=`<label><input type="radio" name="q${index}" value="${opt}"> ${opt}</label>`;
+      html += `<label><input type="radio" name="q${index}" value="${opt}"> ${opt}</label>`;
     });
-    html+=`</div>`;
-    qDiv.innerHTML += html;
+    html += `</div>`;
   });
+  qDiv.innerHTML = html;
 }
 
-// Check Result
+// Check result
 window.checkResult = async function(){
   const c = document.getElementById("course").value;
   if(!c){ alert("Select course"); return; }
@@ -180,18 +177,10 @@ window.checkResult = async function(){
     if(sel.value===questionBank[c][i].answer) score++;
   }
   let status = score===total?"Placement Ready":score>=total-1?"Almost Ready":"Needs Training";
+  document.getElementById("resultDiv").className="result "+(status==="Placement Ready"?"green":status==="Almost Ready"?"yellow":"blue");
+  document.getElementById("resultDiv").innerHTML = `Score: ${score}/${total}<br>${status}`;
 
-  let resDiv = document.getElementById("resultDiv");
-  if(!resDiv){
-    resDiv = document.createElement("div");
-    resDiv.id="resultDiv";
-    resDiv.className="result";
-    document.getElementById("testBox").appendChild(resDiv);
-  }
-  resDiv.className="result " + (status==="Placement Ready"?"green":status==="Almost Ready"?"yellow":"blue");
-  resDiv.innerHTML = `Score: ${score}/${total}<br>${status}`;
-
-  // Save to Firestore
+  // Save to Firestore (single entry per phone)
   const studentData = {
     name: localStorage.getItem("studentName"),
     phone: localStorage.getItem("studentPhone"),
@@ -201,8 +190,10 @@ window.checkResult = async function(){
     status,
     date: new Date().toLocaleString()
   };
-  try{ await addDoc(collection(db,"students"), studentData); console.log("Saved!"); }
-  catch(err){ console.error(err); }
+  try{ 
+    await setDoc(doc(db,"students",studentData.phone), studentData); 
+    console.log("Saved!"); 
+  } catch(err){ console.error(err); }
 
   localStorage.setItem("placementResult", JSON.stringify(studentData));
   document.getElementById("submitBtn").disabled = true;
@@ -213,6 +204,7 @@ window.checkResult = async function(){
 window.downloadPDF = function(){
   const saved = JSON.parse(localStorage.getItem("placementResult")||"{}");
   if(!saved.name){ alert("Submit test first"); return; }
+  const { jsPDF } = window.jspdf;
   const doc = new jsPDF();
   doc.setFontSize(18); doc.text("Placement Result",20,20);
   doc.setFontSize(12);
@@ -225,7 +217,7 @@ window.downloadPDF = function(){
   doc.save(`Placement_${saved.name}.pdf`);
 }
 
-// Admin Dashboard
+// Admin login/logout
 window.showAdminDashboard = function(){
   document.getElementById("studentBox").style.display="none";
   document.getElementById("testBox").style.display="none";
@@ -233,20 +225,18 @@ window.showAdminDashboard = function(){
   document.getElementById("adminActions").style.display="none";
 }
 
-// Admin Login
 window.adminLogin = async function(){
   const email = document.getElementById("adminEmail").value.trim();
-  const password = document.getElementById("adminPass").value.trim();
-  if(!email || !password){ alert("Enter email & password"); return; }
+  const pass = document.getElementById("adminPass").value.trim();
+  if(!email || !pass){ alert("Enter email & password"); return; }
   try{
-    const userCredential = await signInWithEmailAndPassword(auth,email,password);
-    if(userCredential.user.email!=="admin@placement.com"){ alert("Not authorized"); await signOut(auth); return; }
+    const user = await signInWithEmailAndPassword(auth,email,pass);
+    if(user.user.email !== "admin@placement.com"){ alert("Not authorized"); await signOut(auth); return; }
     document.getElementById("adminActions").style.display="block";
     loadStudentData();
   } catch(err){ alert("Admin login failed: "+err.message); }
 }
 
-// Admin Logout
 window.adminLogout = async function(){
   await signOut(auth);
   document.getElementById("adminActions").style.display="none";
@@ -259,12 +249,12 @@ async function loadStudentData(){
   try{
     const snapshot = await getDocs(collection(db,"students"));
     if(snapshot.empty){ alert("No student data"); return; }
-    let table = "<tr><th>Name</th><th>Phone</th><th>Course</th><th>Score</th><th>Total</th><th>Status</th><th>Date</th></tr>";
+    let table="<tr><th>Name</th><th>Phone</th><th>Course</th><th>Score</th><th>Total</th><th>Status</th><th>Date</th></tr>";
     snapshot.forEach(doc=>{
       const s=doc.data();
       table+=`<tr><td>${s.name}</td><td>${s.phone}</td><td>${s.course.toUpperCase()}</td><td>${s.score}</td><td>${s.total}</td><td>${s.status}</td><td>${s.date}</td></tr>`;
     });
-    document.getElementById("dataTable").innerHTML=table;
+    document.getElementById("dataTable").innerHTML = table;
   } catch(err){ console.error(err); }
 }
 
@@ -278,9 +268,9 @@ window.exportCSV = async function(){
       const s=doc.data();
       csv+=`${s.name},${s.phone},${s.course.toUpperCase()},${s.score},${s.total},${s.status},${s.date}\n`;
     });
-    const blob = new Blob([csv],{type:'text/csv'});
+    const blob = new Blob([csv], {type:'text/csv'});
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a'); a.href=url; a.download="placement_data.csv"; a.click();
+    const a=document.createElement('a'); a.href=url; a.download="placement_data.csv"; a.click();
     URL.revokeObjectURL(url);
   } catch(err){ console.error(err); }
 }

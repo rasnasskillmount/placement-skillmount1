@@ -81,7 +81,7 @@ th { background:#667eea; color:white; }
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-app.js";
-import { getFirestore, collection, addDoc, getDocs, doc, setDoc } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-firestore.js";
+import { getFirestore, collection, addDoc, getDocs } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-firestore.js";
 import { getAuth, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-auth.js";
 
 // Firebase config
@@ -190,10 +190,12 @@ window.checkResult = async function(){
     status,
     date: new Date().toLocaleString()
   };
-  try{ 
-    await setDoc(doc(db,"students",studentData.phone), studentData); 
-    console.log("Saved!"); 
-  } catch(err){ console.error(err); }
+   try{ 
+  await addDoc(collection(db,"students"), studentData); 
+  console.log("Saved successfully!"); 
+} catch(err){ 
+  console.error("Error saving data:", err); 
+}
 
   localStorage.setItem("placementResult", JSON.stringify(studentData));
   document.getElementById("submitBtn").disabled = true;
@@ -278,3 +280,4 @@ window.exportCSV = async function(){
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 </body>
 </html>
+

@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Placement Predictor</title>
+<link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+<style>
+body { font-family: 'Roboto', Arial, sans-serif; background: #f4f6f8; margin:0; padding:20px; }
+.logo { text-align:center; margin-bottom:20px; }
+.logo img { height:80px; }
+.box { max-width:700px; margin:auto; background:white; padding:25px; border-radius:12px; box-shadow:0 5px 20px rgba(0,0,0,0.1); }
+h2 { text-align:center; margin-bottom:20px; color:#2c3e50; }
+input, select, button { width:100%; padding:12px; margin-top:10px; border-radius:8px; border:1px solid #ddd; font-size:16px; }
+button { cursor:pointer; background:#667eea; color:white; border:none; transition:0.3s; }
+button:hover { background:#5a67d8; }
+button:disabled { background:#ccc; cursor:not-allowed; }
+.logoutBtn { background:#e74c3c; margin-top:10px; }
+.question { margin-top:15px; padding:15px; background:#f9f9f9; border-radius:8px; }
+.question label { display:block; margin-top:8px; cursor:pointer; }
+.result { margin-top:20px; padding:15px; font-weight:bold; text-align:center; border-radius:8px; }
+.green { background:#d4edda; color:#155724; }
+.yellow { background:#fff3cd; color:#856404; }
+.blue { background:#d1ecf1; color:#0c5460; }
+table { width:100%; border-collapse:collapse; margin-top:20px; font-size:14px; }
+th, td { border:1px solid #ddd; padding:10px; text-align:center; }
+th { background:#667eea; color:white; }
+.admin-link { position:fixed; top:20px; right:20px; background:#2c3e50; color:white; padding:10px 15px; border-radius:8px; text-decoration:none; }
+.admin-link:hover { background:#1f2a38; }
+</style>
+</head>
+<body>
+
+<div class="logo"><img src="your-logo.png" alt="Company Logo"></div>
+
+<a href="#" class="admin-link" onclick="showAdminDashboard(); return false;"><i class="fas fa-cog"></i> Admin</a>
+
+<!-- Student Login -->
+<div class="box" id="studentBox">
+  <h2><i class="fas fa-user-graduate"></i> Placement Predictor</h2>
+  <label>Student Name</label>
+  <input type="text" id="studentName" placeholder="Enter your full name">
+  <label>Phone Number</label>
+  <input type="tel" id="studentPhone" placeholder="10-digit phone number">
+  <button onclick="studentLogin()"><i class="fas fa-sign-in-alt"></i> Login</button>
+</div>
+
+<!-- Test Box -->
+<div class="box" id="testBox" style="display:none">
+  <h2><i class="fas fa-clipboard-list"></i> Take Test</h2>
+  <p id="welcome" style="text-align:center; font-weight:bold;"></p>
+  <button id="studentLogoutBtn" class="logoutBtn" onclick="studentLogout()" style="display:none;">Logout</button>
+  <label>Select your course:</label>
+  <select id="course" onchange="loadQuestions()">
+    <option value="">-- Select --</option>
+    <option value="bsc">BSc</option>
+    <option value="bcom">BCom</option>
+    <option value="bba">BBA</option>
+    <option value="mba">MBA</option>
+    <option value="ba">BA</option>
+  </select>
+  <div id="questions"></div>
+  <button id="submitBtn" onclick="checkResult()"><i class="fas fa-check"></i> Submit Test</button>
+  <button id="pdfBtn" onclick="downloadPDF()" disabled><i class="fas fa-download"></i> Download Result PDF</button>
+</div>
+
+<!-- Admin Box -->
+<div class="box" id="adminBox" style="display:none">
+  <h2><i class="fas fa-chart-line"></i> Admin Dashboard</h2>
+  <input type="email" id="adminEmail" placeholder="Enter admin email">
+  <input type="password" id="adminPass" placeholder="Enter admin password">
+  <button onclick="adminLogin()"><i class="fas fa-sign-in-alt"></i> Login</button>
+  <div id="adminActions" style="display:none; margin-top:20px;">
+    <button onclick="exportCSV()"><i class="fas fa-file-csv"></i> Export All Data as CSV</button>
+    <table id="dataTable"></table>
+  </div>
+  <button onclick="adminLogout()" class="logoutBtn">Logout</button>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-app.js";
+import { getAnalytics } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-analytics.js";
+import { getFirestore, collection, addDoc, getDocs } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-firestore.js";
+import { getAuth, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-auth.js";
+import { jsPDF } from "https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js";
+
+// Firebase Config
+const firebaseConfig = {
+  apiKey: "AIzaSyAWS62gFaVKSUadKwcmVPFpEwKei5g8qGY",
+  authDomain: "placement-predictor-skillmount.firebaseapp.com",
+  projectId: "placement-predictor-skillmount",
+  storageBucket: "placement-predictor-skillmount.firebasestorage.app",
+  messagingSenderId: "1038162967890",
+  appId: "1:1038162967890:web:f15be54b8401e5cea6ce8b",
+  measurementId: "G-90VEKWL9RZ"
+};
+
+const app = initializeApp(firebaseConfig);
+const analytics = getAnalytics(app);
+const db = getFirestore(app);
+const auth = getAuth(app);
+
+// Question Bank
+const questionBank = {
+  bsc: [
+    {q:"Average of 4 numbers is 20. Total?", options:["40","60","80","100"], answer:"80"},
+    {q:"Best skill for data roles?", options:["Memorization","Logical thinking","Handwriting","Reading"], answer:"Logical thinking"}
+  ],
+  bcom: [
+    {q:"Cost ₹500, Profit 20%. SP?", options:["550","600","650","700"], answer:"600"},
+    {q:"Who keeps financial records?", options:["HR","Marketing","Accountant","Sales"], answer:"Accountant"}
+  ],
+  bba: [
+    {q:"Sales increase depends on?", options:["Design","Customer needs","Rules","Uniform"], answer:"Customer needs"},
+    {q:"Manager skill?", options:["Silence","Communication","Luck","Force"], answer:"Communication"}
+  ],
+  mba: [
+    {q:"Demand up, supply same. Price?", options:["Down","Same","Up","Zero"], answer:"Up"},
+    {q:"Best KPI?", options:["Emails","Meetings","Revenue","Office"], answer:"Revenue"}
+  ],
+  ba: [
+    {q:"Best employability skill?", options:["Memorizing","Communication","Avoid teamwork","Only exams"], answer:"Communication"},
+    {q:"Career for good communication?", options:["Data entry","Content writing","Repair","Inventory"], answer:"Content writing"}
+  ]
+};
+
+// Student Login
+window.studentLogin = function(){
+  const name = document.getElementById("studentName").value.trim();
+  const phone = document.getElementById("studentPhone").value.trim();
+  if(!name || !/^[0-9]{10}$/.test(phone)){ alert("Enter valid name & 10-digit phone"); return; }
+  localStorage.setItem("studentName", name);
+  localStorage.setItem("studentPhone", phone);
+  document.getElementById("studentBox").style.display = "none";
+  document.getElementById("testBox").style.display = "block";
+  document.getElementById("welcome").innerText = `Welcome, ${name} 👋`;
+  document.getElementById("pdfBtn").disabled = true;
+  document.getElementById("studentLogoutBtn").style.display = "block";
+}
+
+// Student Logout
+window.studentLogout = function(){
+  localStorage.removeItem("studentName");
+  localStorage.removeItem("studentPhone");
+  localStorage.removeItem("placementResult");
+  document.getElementById("studentBox").style.display = "block";
+  document.getElementById("testBox").style.display = "none";
+  document.getElementById("welcome").innerText = "";
+  document.getElementById("studentLogoutBtn").style.display = "none";
+}
+
+// Load Questions
+window.loadQuestions = function(){
+  const c = document.getElementById("course").value;
+  const qDiv = document.getElementById("questions");
+  qDiv.innerHTML = "";
+  document.getElementById("resultDiv")?.remove();
+  document.getElementById("submitBtn").disabled = false;
+  document.getElementById("pdfBtn").disabled = true;
+  if(!c) return;
+  questionBank[c].forEach((item,index)=>{
+    let html=`<div class="question"><p>${index+1}. ${item.q}</p>`;
+    item.options.forEach(opt=>{
+      html+=`<label><input type="radio" name="q${index}" value="${opt}"> ${opt}</label>`;
+    });
+    html+=`</div>`;
+    qDiv.innerHTML += html;
+  });
+}
+
+// Check Result
+window.checkResult = async function(){
+  const c = document.getElementById("course").value;
+  if(!c){ alert("Select course"); return; }
+  let score=0, total=questionBank[c].length;
+  for(let i=0;i<total;i++){
+    const sel=document.querySelector(`input[name="q${i}"]:checked`);
+    if(!sel){ alert("Answer all questions"); return; }
+    if(sel.value===questionBank[c][i].answer) score++;
+  }
+  let status = score===total?"Placement Ready":score>=total-1?"Almost Ready":"Needs Training";
+
+  let resDiv = document.getElementById("resultDiv");
+  if(!resDiv){
+    resDiv = document.createElement("div");
+    resDiv.id="resultDiv";
+    resDiv.className="result";
+    document.getElementById("testBox").appendChild(resDiv);
+  }
+  resDiv.className="result " + (status==="Placement Ready"?"green":status==="Almost Ready"?"yellow":"blue");
+  resDiv.innerHTML = `Score: ${score}/${total}<br>${status}`;
+
+  // Save to Firestore
+  const studentData = {
+    name: localStorage.getItem("studentName"),
+    phone: localStorage.getItem("studentPhone"),
+    course: c,
+    score,
+    total,
+    status,
+    date: new Date().toLocaleString()
+  };
+  try{ await addDoc(collection(db,"students"), studentData); console.log("Saved!"); }
+  catch(err){ console.error(err); }
+
+  localStorage.setItem("placementResult", JSON.stringify(studentData));
+  document.getElementById("submitBtn").disabled = true;
+  document.getElementById("pdfBtn").disabled = false;
+}
+
+// Download PDF
+window.downloadPDF = function(){
+  const saved = JSON.parse(localStorage.getItem("placementResult")||"{}");
+  if(!saved.name){ alert("Submit test first"); return; }
+  const doc = new jsPDF();
+  doc.setFontSize(18); doc.text("Placement Result",20,20);
+  doc.setFontSize(12);
+  doc.text(`Name: ${saved.name}`,20,40);
+  doc.text(`Phone: ${saved.phone}`,20,50);
+  doc.text(`Course: ${saved.course.toUpperCase()}`,20,60);
+  doc.text(`Score: ${saved.score}/${saved.total}`,20,70);
+  doc.text(`Date: ${saved.date}`,20,80);
+  doc.text(`Status: ${saved.status}`,20,95);
+  doc.save(`Placement_${saved.name}.pdf`);
+}
+
+// Admin Dashboard
+window.showAdminDashboard = function(){
+  document.getElementById("studentBox").style.display="none";
+  document.getElementById("testBox").style.display="none";
+  document.getElementById("adminBox").style.display="block";
+  document.getElementById("adminActions").style.display="none";
+}
+
+// Admin Login
+window.adminLogin = async function(){
+  const email = document.getElementById("adminEmail").value.trim();
+  const password = document.getElementById("adminPass").value.trim();
+  if(!email || !password){ alert("Enter email & password"); return; }
+  try{
+    const userCredential = await signInWithEmailAndPassword(auth,email,password);
+    if(userCredential.user.email!=="admin@placement.com"){ alert("Not authorized"); await signOut(auth); return; }
+    document.getElementById("adminActions").style.display="block";
+    loadStudentData();
+  } catch(err){ alert("Admin login failed: "+err.message); }
+}
+
+// Admin Logout
+window.adminLogout = async function(){
+  await signOut(auth);
+  document.getElementById("adminActions").style.display="none";
+  document.getElementById("adminEmail").value="";
+  document.getElementById("adminPass").value="";
+}
+
+// Load student data
+async function loadStudentData(){
+  try{
+    const snapshot = await getDocs(collection(db,"students"));
+    if(snapshot.empty){ alert("No student data"); return; }
+    let table = "<tr><th>Name</th><th>Phone</th><th>Course</th><th>Score</th><th>Total</th><th>Status</th><th>Date</th></tr>";
+    snapshot.forEach(doc=>{
+      const s=doc.data();
+      table+=`<tr><td>${s.name}</td><td>${s.phone}</td><td>${s.course.toUpperCase()}</td><td>${s.score}</td><td>${s.total}</td><td>${s.status}</td><td>${s.date}</td></tr>`;
+    });
+    document.getElementById("dataTable").innerHTML=table;
+  } catch(err){ console.error(err); }
+}
+
+// Export CSV
+window.exportCSV = async function(){
+  try{
+    const snapshot = await getDocs(collection(db,"students"));
+    if(snapshot.empty){ alert("No data"); return; }
+    let csv="Name,Phone,Course,Score,Total,Status,Date\n";
+    snapshot.forEach(doc=>{
+      const s=doc.data();
+      csv+=`${s.name},${s.phone},${s.course.toUpperCase()},${s.score},${s.total},${s.status},${s.date}\n`;
+    });
+    const blob = new Blob([csv],{type:'text/csv'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href=url; a.download="placement_data.csv"; a.click();
+    URL.revokeObjectURL(url);
+  } catch(err){ console.error(err); }
+}
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+</body>
+</html>
